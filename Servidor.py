@@ -3,10 +3,9 @@ from threading import Thread
 import random
 
 
+def Handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ):
 
-def handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ):
-    manter_conexao = True
-    while manter_conexao: #while para manter a conexão com o cliente enquanto for necessário
+    while True: #while para manter a conexão com o cliente enquanto for necessário
 
         # Recebendo os dados do Cliente:
         data = mClientSocket.recv(2048) #recebe a primeira requisição do cliente
@@ -44,15 +43,49 @@ def handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ):
         if req == "HANDSHAKE FINISHED": # recebe do cliente que ele ja fez a chave secreta e também o servidor pode fazer a chave secreta dele
 
             chave_secreta_servidor = int(pow(X_cipherCliente, B_ChavePrivServ, P_ChavePubServ)) # calculo da chave secreta
-            print(f"chave secreta servidor: {chave_secreta_servidor}")
-            manter_conexao = False 
-            return chave_secreta_servidor
-            
+    
+            return chave_secreta_servidor #o return ja acaba com a função e retorna a chave secreta
+            # a variável manter_conexão no while não precisa por causa desse return
+
+def GetHandler(mClientSocket): # essa função lida com as requisições do get
+
+    dados = mClientSocket.recv(2048) #atende a requisição do cliente
+    print(f'{dados.decode()}')
+    #resposta a solicitação 
+    cabecalho = 'HTTP/1.1 200 OK \r\n' \
+                'Date: Tue, 09 Aug 2022 13:23:35 GMT\r\n' \
+                'Server: MyServer/0.0.1 (Ubuntu)\r\n' \
+                'Content-Type: text/html\r\n' \
+                '\r\n'
+
+    payload = '<html>' \
+              '<head><title>Projeto de redes</title></head>' \
+              '<body><h1> Projeto de redes</h1>' \
+              '<h2>Teste Teste Teste</h2>' \
+              '</body>' \
+              '</html>'
+
+    # a resposta dessa requisição é um arquivo (txt) com conteudo html consistindo em um cabeçalho e a carga util
+    MensagemRespostahtml = cabecalho + payload
+
+    #para ser implementado
+    #codigo 200
+    #MensagemRespostahtml =  MensagemRespostahtml.sucesso()
+    #codigo 404
+    #MensagemRespostahtml = MensagemRespostahtml.NaoEncontrado()
+
+    mClientSocket.send(MensagemRespostahtml.encode())
+
 
 def HandleRequest(mClientSocket, mClientAddr, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ): 
-    chave_secreta_servidor = handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ) 
-    #separei em duas funções para depois se houver mais comunicações o codigo ficar mais facil de entender
-    # depois da para fazer isso com o cliente também se precisar
+
+    # Inicialmente é preciso realizar o handshake com o cliente para calcular a chave de criptografia
+    chave_secreta_servidor = Handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ)
+    print(f"chave secreta servidor: {chave_secreta_servidor}")
+
+    # A próxima etapa consiste em atender as requisições do cliente que nesse caso é o get
+    GetHandler(mClientSocket)
+    
 
 
 #DADOS
