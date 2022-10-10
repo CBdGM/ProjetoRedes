@@ -1,6 +1,7 @@
 from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
 import random
+import cryptocode
 
 
 def Handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ):
@@ -10,11 +11,12 @@ def Handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ):
         # Recebendo os dados do Cliente:
         data = mClientSocket.recv(2048) #recebe a primeira requisição do cliente
         req = data.decode() # a resposta é recebida em bytes, por isso é preciso transformar bytes em string para podermos entender
-        
+
+
         if req == "CLIENT HELLO": #respondendo o client hello enviado pelo cliente, ele quer as chaves publicas
 
-            req = "SERVER HELLO" # da a resposta para o cliente saber que esse é o server hello e o conteudo é as chaves publicas
-            mClientSocket.send(req.encode()) #envia a requisicao
+            resp = "SERVER HELLO" # da a resposta para o cliente saber que esse é o server hello e o conteudo é as chaves publicas
+            mClientSocket.send(resp.encode()) #envia a requisicao
 
             mClientSocket.send(P_ChavePubServ.encode()) #envia as chaves publicas
             mClientSocket.send(G_ChavePubServ.encode())
@@ -36,21 +38,28 @@ def Handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ):
             Y_cipherServidor = str(Y_cipherServidor) # transformando para string para poder mandar para o cliente
             mClientSocket.send(Y_cipherServidor.encode()) #mandando o cipher para o cliente
 
-            req = "HANDSHAKE FINISHED" # notificando que a troca de informações foi concluida e que ja pode ser feito o calculo da chave secreta
-            mClientSocket.send(req.encode())
+            resp = "HANDSHAKE FINISHED" # notificando que a troca de informações foi concluida e que ja pode ser feito o calculo da chave secreta
+            mClientSocket.send(resp.encode())
 
 
         if req == "HANDSHAKE FINISHED": # recebe do cliente que ele ja fez a chave secreta e também o servidor pode fazer a chave secreta dele
 
             chave_secreta_servidor = int(pow(X_cipherCliente, B_ChavePrivServ, P_ChavePubServ)) # calculo da chave secreta
     
-            return chave_secreta_servidor #o return ja acaba com a função e retorna a chave secreta
+            #o return ja acaba com a função e retorna a chave secreta
             # a variável manter_conexão no while não precisa por causa desse return
+            # a chave secreta é transformada em string por causa da função de criptografia que exige ela em string para criptografar 
+            return str(chave_secreta_servidor) 
 
-def GetHandler(mClientSocket): # essa função lida com as requisições do get
+            
 
-    dados = mClientSocket.recv(2048) #atende a requisição do cliente
-    print(f'{dados.decode()}')
+def GetHandler(mClientSocket, chave_secreta_servidor): # essa função lida com as requisições do get
+
+    dados = mClientSocket.recv(2048)  #atende a requisição do cliente
+    dados = dados.decode() #decodificado de bytes para string
+    dados = cryptocode.decrypt(dados, chave_secreta_servidor) # decriptografado utilziando a chave secreta
+    print(f'requisição do cliente: {dados}')
+
     #resposta a solicitação 
     cabecalho = 'HTTP/1.1 200 OK \r\n' \
                 'Date: Tue, 09 Aug 2022 13:23:35 GMT\r\n' \
@@ -73,7 +82,9 @@ def GetHandler(mClientSocket): # essa função lida com as requisições do get
     #MensagemRespostahtml =  MensagemRespostahtml.sucesso()
     #codigo 404
     #MensagemRespostahtml = MensagemRespostahtml.NaoEncontrado()
+    
 
+    MensagemRespostahtml = cryptocode.encrypt(MensagemRespostahtml, chave_secreta_servidor) #criptografa a mensagem
     mClientSocket.send(MensagemRespostahtml.encode())
 
 
@@ -82,9 +93,9 @@ def HandleRequest(mClientSocket, mClientAddr, P_ChavePubServ, G_ChavePubServ, B_
     # Inicialmente é preciso realizar o handshake com o cliente para calcular a chave de criptografia
     chave_secreta_servidor = Handshake(mClientSocket, P_ChavePubServ, G_ChavePubServ, B_ChavePrivServ)
     print(f"chave secreta servidor: {chave_secreta_servidor}")
-
+    
     # A próxima etapa consiste em atender as requisições do cliente que nesse caso é o get
-    GetHandler(mClientSocket)
+    GetHandler(mClientSocket, chave_secreta_servidor)
     
 
 
