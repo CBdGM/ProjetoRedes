@@ -1,9 +1,10 @@
 from socket import socket, AF_INET, SOCK_STREAM
 import random
 import cryptocode
+import rsa
 
 
-def Handshake(mClientSocket, A_ChavePrivClient):
+def Handshake(mClientSocket, A_ChavePrivClient, rsa_chave_pub_cliente):
 
     req = None
     mensagem = "CLIENT HELLO" # ta fazendo a primeira requisição pro servidor
@@ -39,21 +40,35 @@ def Handshake(mClientSocket, A_ChavePrivClient):
 
             Y_cipherServidor = mClientSocket.recv(2048) #recebendo o cipher
             Y_cipherServidor = int(Y_cipherServidor.decode()) #decodificando direto pra inteiro para poder calcular dps
-        
 
+        if req == "RSA CHANGE KEY": # faz a troca de chaves da biblioteca de assinatura digital
+            resp = "RSA CHANGE KEY"
+            mClientSocket.send(resp.encode()) # reponde, notificando para o servidor que irá ocorrera a troca de chaves
+
+            rsa_chave_pub_cliente = rsa_chave_pub_cliente.save_pkcs1(format = "DER") # serializa a chave publica do cliente para bytes
+            mClientSocket.send(rsa_chave_pub_cliente) # envia a chave publica do cliente para o servidor
+
+            rsa_chave_pub_serv = mClientSocket.recv(2048) #recebe a chave publica do servidor 
+            rsa_chave_pub_serv = rsa.PublicKey.load_pkcs1(rsa_chave_pub_serv, format="DER") # transforma ela de bytes para objeto
 
         if req == "HANDSHAKE FINISHED":
+
             chave_secreta_cliente = int(pow(Y_cipherServidor, A_ChavePrivClient, P_ChavePubServ)) #calculo da chave secreta
             print(f"Chave secreta cliente: {chave_secreta_cliente}\n")
+
             mClientSocket.send(req.encode()) #alertanado para o servidor que ja possui a chave secreta
+
             return str(chave_secreta_cliente)
 
 #função que lida com as requisições get
 def GET(mClientSocket, req):
-
-    req = cryptocode.encrypt(req, chave_secreta_cliente) #criptografia da requisição
-    req = req.encode()
-    mClientSocket.send(req) # envio da requisição
+    
+    req = cryptocode.encrypt(req, chave_secreta_cliente) # criptografia da requisição do get
+    req = req.encode()  # transformando em bytes para mandar pro servidor
+    mClientSocket.send(req)
+    
+    req_assinado = rsa.sign(req, rsa_chave_priv_cliente, 'SHA-512')     # assinatura digital
+    mClientSocket.send(req_assinado) # envio da assinatura digital para o servidor
 
     dados = mClientSocket.recv(2048) # recebimento dos dados respondidos pelo servidor após a requisição
     dados = dados.decode()
@@ -79,6 +94,7 @@ def AcharIndentificador(mClientSocket, indentificador = "None"):
 A_ChavePrivClient = random.randint(1, 64)
 chave_secreta_cliente = None
 
+
 indentificador = "None"
 
 
@@ -88,13 +104,16 @@ mClientSocket.connect(('127.0.0.1', 1235)) #se conectando com o servidor
 
 # a primeira comunicação é para ver se o cliente ja se comunicou com o servidor antes e ser indentificado no servidor
 AcharIndentificador(mClientSocket, indentificador) 
+(rsa_chave_pub_cliente, rsa_chave_priv_cliente) = rsa.newkeys(2048)
 
 
 # é necessário fazer o primeiro contato com o servidor para garantir a criptografia
 # a função handshake é responsavel por calcular a chave de criptografia utilizada para a troca de mensagens
-chave_secreta_cliente = Handshake(mClientSocket, A_ChavePrivClient)
+chave_secreta_cliente = Handshake(mClientSocket, A_ChavePrivClient, rsa_chave_pub_cliente)
 
 # essa é a primeira requisição feita para o servidor
 # apenas um get de teste que recebe uma string com conteudo html
-req = "teste"
+
+
+req = "get teste"
 GET(mClientSocket, req)
