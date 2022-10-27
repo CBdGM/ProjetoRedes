@@ -3,3 +3,4 @@ class Cliente:
         self.indentificador = indentificador
         self.endereço = endereço
         self.chave_secreta = None
+        self.rsa_chave_secreta = None
